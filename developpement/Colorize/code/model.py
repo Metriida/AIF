@@ -15,12 +15,13 @@ class DownSampleBlock(nn.Module):
 
     def __init__(self, in_channels, out_channels):
         super().__init__()
-        self.conv_block = ...
-        self.maxpool = ...
+        self.conv_block = double_conv(in_channels, out_channels)
+        self.maxpool = nn.MaxPool2d(2)
 
     def forward(self, x):
-        x_skip = ...
-        out = ... 
+        x = self.conv_block(x)
+        x_skip = x
+        out = self.maxpool(x)
 
         return out , x_skip
 
@@ -28,8 +29,8 @@ class UpSampleBlock(nn.Module):
 
     def __init__(self, in_channels, out_channels):
         super().__init__()
-        self.conv_block = ...
-        self.upsample = ... # use nn.Upsample
+        self.conv_block = double_conv(in_channels, out_channels)
+        self.upsample = nn.Upsample(scale_factor=2)
 
     def forward(self, x, x_skip):
         x = self.upsample(x)
@@ -44,38 +45,45 @@ class UNet(nn.Module):
     def __init__(self):
         super().__init__()
 
-        self.downsample_block_1 = ...
-        self.downsample_block_2 = ...
-        self.downsample_block_3 = ...
+        self.downsample_block_1 = DownSampleBlock(1, 32)
+        self.downsample_block_2 = DownSampleBlock(32, 64)
+        self.downsample_block_3 = DownSampleBlock(64, 128)
         self.middle_conv_block = double_conv(128, 256)        
 
 
-        self.upsample_block_3 = ...
-        self.upsample_block_2 = ...
-        self.upsample_block_1 = ...
+        self.upsample_block_3 = UpSampleBlock(128 + 256, 128)
+        self.upsample_block_2 = UpSampleBlock(64 + 128, 64)
+        self.upsample_block_1 = UpSampleBlock(32 + 64, 32)
 
         self.last_conv = nn.Conv2d(32, 3, 1)
 
 
     def forward(self, x):
-        x, x_skip1 = ...
-        x, x_skip2 = ...
-        x, x_skip3 = ... 
-
+        x, x_skip1 = self.downsample_block_1(x)
+        x, x_skip2 = self.downsample_block_2(x)
+        x, x_skip3 = self.downsample_block_3(x)
         x = self.middle_conv_block(x)
 
-        x = #use upsampleblock_3 and x_skip3
-        x = #use upsampleblock_2 and x_skip2
-        x = #use upsampleblock_1 and x_skip1       
-
+        x = self.upsample_block_3(x, x_skip3)
+        x = self.upsample_block_2(x, x_skip2)
+        x = self.upsample_block_1(x, x_skip1)
         out = F.sigmoid(self.last_conv(x))
 
         return out
+
+    def get_features(self, x):
+        x, x_skip1 = self.downsample_block_1(x)
+        x, x_skip2 = self.downsample_block_2(x)
+        x, x_skip3 = self.downsample_block_3(x)
+        # x = self.middle_conv_block(x)
+
+        return x
 
 
 if __name__=='__main__':
     x = torch.rand(16,1,224,224)
     net = UNet()
     y = net(x)
+    print(y.shape)
     assert y.shape == (16,3,224,224)
     print('Shapes OK')
